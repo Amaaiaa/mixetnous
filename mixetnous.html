@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mix et Nous</title>
+<style>
+  body {
+    font-family: 'Cursive', cursive;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #FFA500, #FF69B4);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  header {
+    text-align: center;
+    padding: 20px;
+    font-size: 2em;
+    font-style: italic;
+  }
+  .container {
+    width: 95%;
+    max-width: 700px;
+    margin-bottom: 20px;
+  }
+  input, button {
+    padding: 8px;
+    border-radius: 8px;
+    border: none;
+    margin: 5px 0;
+  }
+  button {
+    cursor: pointer;
+    background: #fff;
+    color: #FF69B4;
+    font-weight: bold;
+  }
+  .song-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+    margin: 10px 0;
+    width: 100%;
+  }
+  .song {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    background: rgba(255,255,255,0.15);
+    padding: 10px;
+    border-radius: 15px;
+    cursor: grab;
+    transition: transform 0.3s;
+  }
+  .song.dragging {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  .cover {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    margin-right: 15px;
+    object-fit: cover;
+  }
+  .info {
+    flex: 1;
+    min-width: 200px;
+  }
+  .title {
+    font-size: 1.2em;
+    font-style: italic;
+  }
+  .artist {
+    font-size: 0.9em;
+  }
+  .comments {
+    width: 100%;
+    margin-top: 10px;
+    text-align: left;
+  }
+  .comment {
+    background: rgba(255,255,255,0.2);
+    padding: 5px;
+    border-radius: 10px;
+    margin-top: 5px;
+    word-wrap: break-word;
+  }
+  .emoji-btn {
+    cursor: pointer;
+    margin-left: 5px;
+  }
+  .add-song-container input {
+    width: 70%;
+  }
+  .spotify-embed {
+    margin-top: 5px;
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<header>Mix et Nous</header>
+
+<div class="container login-container">
+  <h3>Login</h3>
+  <input type="text" id="username" placeholder="Amaia o Vicente">
+  <input type="password" id="password" placeholder="Contraseña">
+  <button onclick="login()">Entrar</button>
+  <p id="login-msg"></p>
+</div>
+
+<div class="container ranking-container" style="display:none;">
+  <h3 id="user-title"></h3>
+
+  <div>
+    <h4>Cambiar contraseña</h4>
+    <input type="password" id="new-password" placeholder="Nueva contraseña">
+    <button onclick="changePassword()">Cambiar</button>
+  </div>
+
+  <div class="add-song-container">
+    <input type="text" id="song-title" placeholder="Nombre canción">
+    <input type="text" id="song-artist" placeholder="Artista">
+    <input type="text" id="song-cover" placeholder="URL portada">
+    <input type="text" id="song-preview" placeholder="URL preview (Spotify embed) opcional">
+    <button onclick="addSong()">Añadir</button>
+  </div>
+
+  <ul class="song-list" id="songList"></ul>
+
+  <button onclick="logout()">Cerrar sesión</button>
+</div>
+
+<div class="container public-container">
+  <h3>Ranking público</h3>
+  <ul class="song-list" id="publicList"></ul>
+
+  <div class="add-comment-container">
+    <input type="text" id="comment-text" placeholder="Comentario público...">
+    <input type="file" id="comment-image">
+    <button onclick="addPublicComment()">Añadir</button>
+  </div>
+</div>
+
+<script>
+  let passwords = { Amaia: "amaia123", Vicente: "vicente123" };
+  let currentUser = null;
+
+  // Inicializa o recupera datos
+  const storage = JSON.parse(localStorage.getItem("mixEtNous")) || { Amaia: [], Vicente: [], publicComments: [] };
+  localStorage.setItem("mixEtNous", JSON.stringify(storage));
+
+  const loginMsg = document.getElementById("login-msg");
+  const loginContainer = document.querySelector(".login-container");
+  const rankingContainer = document.querySelector(".ranking-container");
+  const userTitle = document.getElementById("user-title");
+  const songList = document.getElementById("songList");
+  const publicList = document.getElementById("publicList");
+
+  function login(){
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+    if(passwords[username] && passwords[username] === password){
+      currentUser = username;
+      loginContainer.style.display = "none";
+      rankingContainer.style.display = "block";
+      userTitle.textContent = `Ranking de ${currentUser}`;
+      renderSongs();
+      renderPublic();
+    } else {
+      loginMsg.textContent = "Usuario o contraseña incorrectos";
+    }
+  }
+
+  function logout(){
+    currentUser = null;
+    rankingContainer.style.display = "none";
+    loginContainer.style.display = "block";
+    loginMsg.textContent = "";
+  }
+
+  function changePassword(){
+    const newPass = document.getElementById("new-password").value.trim();
+    if(newPass){
+      passwords[currentUser] = newPass;
+      document.getElementById("new-password").value = "";
+      alert("Contraseña cambiada!");
+    }
+  }
+
+  function renderSongs(){
+    songList.innerHTML = "";
+    const songs = storage[currentUser];
+    songs.forEach((song, index)=>{
+      const li = document.createElement("li");
+      li.classList.add("song");
+      li.draggable = true;
+      li.dataset.index = index;
+      li.innerHTML = `
+        <img src="${song.cover}" class="cover">
+        <div class="info">
+          <div class="title">${song.title}</div>
+          <div class="artist">${song.artist}</div>
+        </div>
+        <div>
+          <button onclick="deleteSong(${index})">🗑️</button>
+          ${song.preview ? `<iframe class="spotify-embed" src="${song.preview}" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>` : ''}
+        </div>
+      `;
+      songList.appendChild(li);
+    });
+    addDnDHandlers();
+  }
+
+  function deleteSong(index){
+    if(confirm("¿Quieres borrar esta canción?")){
+      storage[currentUser].splice(index,1);
+      localStorage.setItem("mixEtNous", JSON.stringify(storage));
+      renderSongs();
+      renderPublic();
+    }
+  }
+
+  function addSong(){
+    const title = document.getElementById("song-title").value.trim();
+    const artist = document.getElementById("song-artist").value.trim();
+    const cover = document.getElementById("song-cover").value.trim() || "https://via.placeholder.com/60";
+    const preview = document.getElementById("song-preview").value.trim() || "";
+    if(title && artist){
+      storage[currentUser].push({title, artist, cover, preview});
+      localStorage.setItem("mixEtNous", JSON.stringify(storage));
+      renderSongs();
+      renderPublic();
+      document.getElementById("song-title").value = "";
+      document.getElementById("song-artist").value = "";
+      document.getElementById("song-cover").value = "";
+      document.getElementById("song-preview").value = "";
+    }
+  }
+
+  function renderPublic(){
+    publicList.innerHTML = "";
+    ["Amaia","Vicente"].forEach(user=>{
+      storage[user].forEach(song=>{
+        const li = document.createElement("li");
+        li.classList.add("song");
+        li.innerHTML = `
+          <img src="${song.cover}" class="cover">
+          <div class="info">
+            <div class="title">${song.title}</div>
+            <div class="artist">${song.artist} (${user})</div>
+          </div>
+        `;
+        publicList.appendChild(li);
+      });
+    });
+
+    // Mostrar comentarios públicos
+    (storage.publicComments || []).forEach(comment=>{
+      const li = document.createElement("li");
+      li.classList.add("song");
+      let imgTag = comment.img ? `<img src="${comment.img}" style="width:60px;height:60px;border-radius:50%;margin-left:10px;">` : '';
+      li.innerHTML = `<div class="info"><b>${comment.user}:</b> ${comment.text} ${comment.emoji || ''}</div> ${imgTag}`;
+      publicList.appendChild(li);
+    });
+  }
+
+  function addPublicComment(){
+    const text = document.getElementById("comment-text").value.trim();
+    const file = document.getElementById("comment-image").files[0];
+    if(!text && !file) return;
+
+    if(!storage.publicComments) storage.publicComments = [];
+
+    if(file){
+      const reader = new FileReader();
+      reader.onload = function(e){
+        storage.publicComments.push({user: currentUser, text: text, img: e.target.result});
+        localStorage.setItem("mixEtNous", JSON.stringify(storage));
+        renderPublic();
+        document.getElementById("comment-text").value = "";
+        document.getElementById("comment-image").value = "";
+      }
+      reader.readAsDataURL(file);
+    } else {
+      storage.publicComments.push({user: currentUser, text: text});
+      localStorage.setItem("mixEtNous", JSON.stringify(storage));
+      renderPublic();
+      document.getElementById("comment-text").value = "";
+    }
+  }
+
+  // Drag & Drop
+  let dragSrcEl = null;
+  function handleDragStart(e){ dragSrcEl = this; this.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; }
+  function handleDragEnd(e){ this.classList.remove('dragging'); }
+  function handleDragOver(e){ if(e.preventDefault) e.preventDefault(); return false; }
+  function handleDrop(e){ if(e.stopPropagation) e.stopPropagation(); if(dragSrcEl!=this){ let srcIndex = dragSrcEl.dataset.index; let tgtIndex = this.dataset.index; [storage[currentUser][srcIndex], storage[currentUser][tgtIndex]]=[storage[currentUser][tgtIndex], storage[currentUser][srcIndex]]; localStorage.setItem("mixEtNous", JSON.stringify(storage)); renderSongs(); renderPublic(); } return false; }
+  function addDnDHandlers(){ document.querySelectorAll('.song').forEach(item=>{ item.addEventListener('dragstart', handleDragStart,false); item.addEventListener('dragover', handleDragOver,false); item.addEventListener('drop', handleDrop,false); item.addEventListener('dragend', handleDragEnd,false); }); }
+
+</script>
+</body>
+</html>
